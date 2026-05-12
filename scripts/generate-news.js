@@ -240,7 +240,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
 <script>
 (function(){
 var ND=${newsDataJSON};
-var ip=false,ip2=false,cc=0,cks=[],utt=null,sv=null,voices=[],vl=false,inited=false,wd=null,active=false;
+var ip=false,ip2=false,cc=0,cks=[],utt=null,sv=null,voices=[],vl=false,inited=false;
+var lastBoundary=0,boundaryTimer=null,chunkTimer=null;
 
 function bnt(){var t='每日新闻播报。';for(var i=0;i<ND.length;i++){t+=ND[i].category+'新闻。'+ND[i].title+'。'+ND[i].content+'。';}t+='以上是今日新闻摘要，祝您有美好的一天。';return t;}
 
@@ -248,7 +249,15 @@ function stc(text,ml){ml=ml||80;var r=[];var ss=text.split(/(?<=[。！？；])/
 
 function hl(idx){var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');var ft='';for(var i=0;i<=idx&&i<cks.length;i++)ft+=cks[i];var px='每日新闻播报。';var rm=ft;if(rm.indexOf(px)===0)rm=rm.substring(px.length);var nid=0;for(var i=0;i<ND.length;i++){var nt=ND[i].category+'新闻。'+ND[i].title+'。'+ND[i].content+'。';if(rm.length>=nt.length){rm=rm.substring(nt.length);nid=i+1;}else{nid=i;break;}}if(nid>0)nid--;if(its[nid]){its[nid].classList.add('ac');its[nid].scrollIntoView({behavior:'smooth',block:'center'});}var p=((idx+1)/cks.length)*100;document.getElementById('pf').style.width=p+'%';}
 
-function sc(){if(cc>=cks.length){oe();return;}hl(cc);ui('playing');active=true;utt=new SpeechSynthesisUtterance(cks[cc]);utt.lang='zh-CN';utt.rate=parseFloat(document.getElementById('rate').value);utt.pitch=1;utt.volume=1;var v=getCV();if(v)utt.voice=v;utt.onend=function(){active=false;cc++;sc();};utt.onerror=function(e){if(e.error==='canceled'||e.error==='interrupted'){active=false;return;}active=false;cc++;sc();};sv.speak(utt);}
+function sc(){if(cc>=cks.length){oe();return;}hl(cc);ui('playing');clearTimers();lastBoundary=Date.now();utt=new SpeechSynthesisUtterance(cks[cc]);utt.lang='zh-CN';utt.rate=parseFloat(document.getElementById('rate').value);utt.pitch=1;utt.volume=1;var v=getCV();if(v)utt.voice=v;
+utt.onboundary=function(e){if(e.charIndex>0)lastBoundary=Date.now();};
+utt.onend=function(){clearTimers();cc++;sc();};
+utt.onerror=function(e){if(e.error==='canceled'||e.error==='interrupted'){clearTimers();return;}clearTimers();cc++;sc();};
+sv.speak(utt);
+boundaryTimer=setInterval(function(){if(Date.now()-lastBoundary>5000){sv.cancel();clearTimers();cc++;sc();}},1000);
+chunkTimer=setTimeout(function(){sv.cancel();clearTimers();cc++;sc();},15000);}
+
+function clearTimers(){if(boundaryTimer){clearInterval(boundaryTimer);boundaryTimer=null;}if(chunkTimer){clearTimeout(chunkTimer);chunkTimer=null;}}
 
 function initEng(cb){if(inited){cb();return;}var w=new SpeechSynthesisUtterance('');w.volume=0;w.lang='zh-CN';w.onend=function(){inited=true;lv();cb();};w.onerror=function(){inited=true;cb();};sv.speak(w);setTimeout(function(){if(!inited){inited=true;sv.cancel();cb();}},2000);}
 
@@ -256,18 +265,15 @@ function lv(){voices=sv.getVoices();if(voices.length>0)vl=true;}
 
 function getCV(){if(!vl)voices=sv.getVoices();for(var i=0;i<voices.length;i++){if(voices[i].lang==='zh-CN')return voices[i];}for(var i=0;i<voices.length;i++){if(voices[i].lang.indexOf('zh')===0)return voices[i];}for(var i=0;i<voices.length;i++){if(voices[i].lang.indexOf('cmn')!==-1)return voices[i];}return null;}
 
-function startSpeech(){if(!sv){document.getElementById('chromeHint').style.display='block';document.getElementById('sts').textContent='此浏览器不支持语音播报，请使用Chrome打开';return;}if(ip&&!ip2)return;if(ip2){sv.resume();ip2=false;ui('playing');return;}sv.cancel();cc=0;var ft=bnt();cks=stc(ft);initEng(function(){ip=true;ip2=false;ui('playing');sc();startWatchdog();});}
+function startSpeech(){if(!sv){document.getElementById('chromeHint').style.display='block';document.getElementById('sts').textContent='此浏览器不支持语音播报，请使用Chrome打开';return;}if(ip&&!ip2)return;if(ip2){sv.resume();ip2=false;ui('playing');return;}sv.cancel();cc=0;var ft=bnt();cks=stc(ft);initEng(function(){ip=true;ip2=false;ui('playing');sc();});}
 
 function togglePause(){if(!ip)return;if(ip2){sv.resume();ip2=false;ui('playing');}else{sv.pause();ip2=true;ui('paused');}}
 
-function stopSpeech(){sv.cancel();active=false;ip=false;ip2=false;cc=0;cks=[];ui('stopped');var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='0%';clearWatchdog();}
+function stopSpeech(){sv.cancel();clearTimers();ip=false;ip2=false;cc=0;cks=[];ui('stopped');var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='0%';}
 
-function oe(){active=false;ip=false;ip2=false;cc=0;cks=[];ui('finished');var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='100%';clearWatchdog();}
+function oe(){clearTimers();ip=false;ip2=false;cc=0;cks=[];ui('finished');var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='100%';}
 
 function ui(s){var pb=document.getElementById('pBtn'),psb=document.getElementById('psBtn'),sb=document.getElementById('sBtn'),sts=document.getElementById('sts');switch(s){case'playing':sts.textContent='正在播报... ('+(cc+1)+'/'+cks.length+')';pb.style.display='none';psb.style.display='inline-block';psb.textContent='暂停';sb.style.display='inline-block';break;case'paused':sts.textContent='已暂停';psb.textContent='继续';break;case'stopped':sts.textContent='已停止';pb.style.display='inline-block';pb.textContent='开始播报';psb.style.display='none';sb.style.display='none';break;case'finished':sts.textContent='播报完成';pb.style.display='inline-block';pb.textContent='重新播报';psb.style.display='none';sb.style.display='none';break;}}
-
-function clearWatchdog(){if(wd){clearInterval(wd);wd=null;}}
-function startWatchdog(){clearWatchdog();wd=setInterval(function(){if(!ip||ip2)return;if(active&&!sv.speaking){active=false;sv.cancel();cc++;sc();}else if(active&&sv.speaking){sv.pause();sv.resume();}},3000);}
 
 sv=window.speechSynthesis||window.webkitSpeechSynthesis;
 if(sv){lv();if(sv.onvoiceschanged!==undefined)sv.onvoiceschanged=function(){lv();};}
