@@ -31,13 +31,6 @@ async function fetchNews() {
 }
 
 function getFallbackNews() {
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('zh-CN', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-  
   return [
     { category: '国际', title: '全球关注重大国际事件', content: '国际社会持续关注全球重大事件的发展动态，各国领导人就重要议题展开对话与合作。' },
     { category: '国际', title: '国际经济形势分析', content: '全球经济格局持续演变，主要经济体发布最新经济数据，市场关注未来走势。' },
@@ -72,280 +65,25 @@ function generateHTML(newsItems) {
   };
 
   const newsHTML = newsItems.map((item, index) => `
-      <div class="news-item">
+      <div class="news-item" id="news-${index}">
         <span class="news-tag" style="background-color: ${categoryColors[item.category] || '#666'}">${item.category}</span>
         <div class="news-title">${index + 1}. ${item.title}</div>
         <div class="news-content">${item.content}</div>
       </div>`).join('');
 
+  const newsDataJSON = JSON.stringify(newsItems.map(item => ({
+    category: item.category,
+    title: item.title,
+    content: item.content
+  })));
+
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>每日新闻播报 - ${dateStr}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      min-height: 100vh;
-      color: #fff;
-      padding: 20px;
-    }
-    .container { max-width: 800px; margin: 0 auto; }
-    .header {
-      text-align: center;
-      padding: 30px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      margin-bottom: 30px;
-    }
-    .header h1 {
-      font-size: 28px;
-      margin-bottom: 10px;
-      background: linear-gradient(90deg, #00d2ff, #3a7bd5);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .header .date { color: #888; font-size: 16px; }
-    .section { margin-bottom: 30px; }
-    .section-title {
-      font-size: 20px;
-      margin-bottom: 15px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #3a7bd5;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .news-item {
-      background: rgba(255,255,255,0.05);
-      border-radius: 12px;
-      padding: 15px;
-      margin-bottom: 15px;
-      transition: transform 0.2s;
-    }
-    .news-item:hover { transform: translateX(5px); }
-    .news-tag {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-    .news-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; line-height: 1.4; }
-    .news-content { font-size: 14px; color: #aaa; line-height: 1.6; }
-    .controls {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(26, 26, 46, 0.95);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255,255,255,0.1);
-    }
-    .btn-row { display: flex; gap: 10px; justify-content: center; }
-    .btn {
-      padding: 15px 30px;
-      border: none;
-      border-radius: 25px;
-      font-size: 16px;
-      cursor: pointer;
-      transition: all 0.3s;
-      font-weight: 600;
-    }
-    .btn-primary {
-      background: linear-gradient(90deg, #00d2ff, #3a7bd5);
-      color: white;
-    }
-    .btn-primary:hover { transform: scale(1.05); }
-    .btn-secondary {
-      background: rgba(255,255,255,0.1);
-      color: white;
-    }
-    .btn-secondary:hover { background: rgba(255,255,255,0.2); }
-    .settings { display: flex; gap: 20px; justify-content: center; align-items: center; }
-    .setting-item { display: flex; align-items: center; gap: 8px; }
-    .setting-item label { font-size: 14px; color: #888; }
-    .setting-item input[type="range"] {
-      width: 100px;
-      accent-color: #3a7bd5;
-    }
-    .status {
-      text-align: center;
-      font-size: 14px;
-      color: #888;
-      min-height: 20px;
-    }
-    .content { padding-bottom: 200px; }
-    .update-time {
-      text-align: center;
-      color: #666;
-      font-size: 12px;
-      margin-top: 20px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>每日新闻播报</h1>
-      <div class="date">${dateStr}</div>
-    </div>
-    <div class="content">
-      <div class="section">
-        <div class="section-title">今日要闻</div>
-        ${newsHTML}
-      </div>
-    </div>
-    <div class="update-time">更新时间: ${today.toLocaleString('zh-CN')}</div>
-  </div>
-  <div class="controls">
-    <div class="status" id="status">点击"开始播报"收听今日新闻</div>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="playBtn" onclick="startSpeech()">开始播报</button>
-      <button class="btn btn-secondary" id="pauseBtn" onclick="togglePause()" style="display:none">暂停</button>
-      <button class="btn btn-secondary" id="stopBtn" onclick="stopSpeech()" style="display:none">停止</button>
-    </div>
-    <div class="settings">
-      <div class="setting-item">
-        <label>语速</label>
-        <input type="range" id="rate" min="0.5" max="2" step="0.1" value="1">
-        <span id="rateValue">1.0x</span>
-      </div>
-      <div class="setting-item">
-        <label>音调</label>
-        <input type="range" id="pitch" min="0.5" max="2" step="0.1" value="1">
-        <span id="pitchValue">1.0</span>
-      </div>
-    </div>
-  </div>
-  <script>
-    var synth = window.speechSynthesis;
-    var utterance = null;
-    var isPaused = false;
-    var newsText = '';
-    var currentIndex = 0;
-    var newsItems = document.querySelectorAll('.news-item');
-    
-    function buildNewsText() {
-      var text = '每日新闻播报。';
-      newsItems.forEach(function(item) {
-        var tag = item.querySelector('.news-tag').textContent;
-        var title = item.querySelector('.news-title').textContent;
-        var content = item.querySelector('.news-content').textContent;
-        text += tag + '新闻。' + title + '。' + content + '。';
-      });
-      text += '以上是今日新闻摘要，祝您有美好的一天。';
-      return text;
-    }
-    
-    function startSpeech() {
-      if (synth.speaking && !isPaused) {
-        return;
-      }
-      if (isPaused) {
-        synth.resume();
-        isPaused = false;
-        document.getElementById('pauseBtn').textContent = '暂停';
-        document.getElementById('status').textContent = '正在播报...';
-        return;
-      }
-      newsText = buildNewsText();
-      utterance = new SpeechSynthesisUtterance(newsText);
-      utterance.lang = 'zh-CN';
-      utterance.rate = parseFloat(document.getElementById('rate').value);
-      utterance.pitch = parseFloat(document.getElementById('pitch').value);
-      
-      var voices = synth.getVoices();
-      for (var i = 0; i < voices.length; i++) {
-        if (voices[i].lang.indexOf('zh') !== -1) {
-          utterance.voice = voices[i];
-          break;
-        }
-      }
-      
-      utterance.onstart = function() {
-        document.getElementById('status').textContent = '正在播报...';
-        document.getElementById('playBtn').style.display = 'none';
-        document.getElementById('pauseBtn').style.display = 'inline-block';
-        document.getElementById('stopBtn').style.display = 'inline-block';
-      };
-      
-      utterance.onend = function() {
-        document.getElementById('status').textContent = '播报完成';
-        document.getElementById('playBtn').style.display = 'inline-block';
-        document.getElementById('playBtn').textContent = '重新播报';
-        document.getElementById('pauseBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'none';
-      };
-      
-      utterance.onerror = function(e) {
-        document.getElementById('status').textContent = '播报出错: ' + e.error;
-      };
-      
-      synth.speak(utterance);
-    }
-    
-    function togglePause() {
-      if (isPaused) {
-        synth.resume();
-        isPaused = false;
-        document.getElementById('pauseBtn').textContent = '暂停';
-        document.getElementById('status').textContent = '正在播报...';
-      } else {
-        synth.pause();
-        isPaused = true;
-        document.getElementById('pauseBtn').textContent = '继续';
-        document.getElementById('status').textContent = '已暂停';
-      }
-    }
-    
-    function stopSpeech() {
-      synth.cancel();
-      isPaused = false;
-      document.getElementById('status').textContent = '已停止';
-      document.getElementById('playBtn').style.display = 'inline-block';
-      document.getElementById('playBtn').textContent = '开始播报';
-      document.getElementById('pauseBtn').style.display = 'none';
-      document.getElementById('stopBtn').style.display = 'none';
-    }
-    
-    document.getElementById('rate').addEventListener('input', function() {
-      document.getElementById('rateValue').textContent = this.value + 'x';
-    });
-    
-    document.getElementById('pitch').addEventListener('input', function() {
-      document.getElementById('pitchValue').textContent = this.value;
-    });
-    
-    if (synth.onvoiceschanged !== undefined) {
-      synth.onvoiceschanged = function() {};
-    }
-  </script>
-</body>
-</html>`;
-}
-
-async function main() {
-  const newsItems = await fetchNews();
-  const html = generateHTML(newsItems);
-  
-  const distDir = path.join(__dirname, '..', 'dist');
-  if (!fs.existsSync(distDir)) {
-    fs.mkdirSync(distDir, { recursive: true });
-  }
-  
-  fs.writeFileSync(path.join(distDir, 'index.html'), html, 'utf8');
-  console.log('News HTML generated successfully!');
-  console.log('Total news items:', newsItems.length);
-}
-
-main().catch(console.error);
