@@ -42,26 +42,68 @@ function parseRSS(xml, defaultCategory) {
 }
 
 async function fetchRSS(source) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const response = await fetch(source.url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsRadio/1.0)', 'Referer': 'https://www.baidu.com' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!response.ok) { console.log(`  ${source.name}: HTTP ${response.status}`); return []; }
-    if (source.jsonApi) {
-      const json = await response.json();
-      const items = parseJSONFeed(json, source);
-      console.log(`  ${source.name}: ${items.length} 条`);
+  var items = await fetchDirect(source);
+  if (items.length > 0) return items;
+  items = await fetchViaProxy(source);
+  if (items.length > 0) return items;
+  console.log('  ' + source.name + ': 所有方式均失败');
+  return [];
+}
+
+async function fetchDirect(source) {
+  var headersList = [
+    { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36', 'Referer': 'https://www.baidu.com', 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' },
+    { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36', 'Referer': 'https://www.google.com', 'Accept': 'text/xml,application/xml;q=0.9,*/*;q=0.8' },
+    { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0', 'Referer': 'https://news.baidu.com', 'Accept': 'application/xml,text/xml;q=0.9,*/*;q=0.8' },
+  ];
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      var controller = new AbortController();
+      var timeout = setTimeout(function() { controller.abort(); }, 15000);
+      var response = await fetch(source.url, {
+        headers: headersList[attempt % headersList.length],
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) { console.log('  ' + source.name + ' 直连: HTTP ' + response.status + ' (attempt ' + (attempt+1) + ')'); continue; }
+      if (source.jsonApi) {
+        var json = await response.json();
+        var items = parseJSONFeed(json, source);
+        console.log('  ' + source.name + ' 直连: ' + items.length + ' 条');
+        return items;
+      }
+      var xml = await response.text();
+      if (xml.length < 100) { console.log('  ' + source.name + ' 直连: 响应过短 (attempt ' + (attempt+1) + ')'); continue; }
+      var items = parseRSS(xml, source.category);
+      if (items.length === 0) { console.log('  ' + source.name + ' 直连: 解析为空 (attempt ' + (attempt+1) + ')'); continue; }
+      console.log('  ' + source.name + ' 直连: ' + items.length + ' 条');
       return items;
+    } catch (e) { console.log('  ' + source.name + ' 直连: 失败 attempt ' + (attempt+1) + ' (' + e.message + ')'); }
+  }
+  return [];
+}
+
+async function fetchViaProxy(source) {
+  if (source.jsonApi) return [];
+  try {
+    var proxyUrl = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(source.url);
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 20000);
+    var response = await fetch(proxyUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!response.ok) { console.log('  ' + source.name + ' 代理: HTTP ' + response.status); return []; }
+    var json = await response.json();
+    if (json.status !== 'ok' || !json.items || json.items.length === 0) { console.log('  ' + source.name + ' 代理: 无数据'); return []; }
+    var items = [];
+    for (var i = 0; i < json.items.length; i++) {
+      var entry = json.items[i];
+      var title = (entry.title || '').replace(/<[^>]+>/g, '').trim();
+      var desc = (entry.description || entry.content || title).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+      if (title && title.length >= 5) items.push({ category: source.category, title: title, content: desc || title });
     }
-    const xml = await response.text();
-    const items = parseRSS(xml, source.category);
-    console.log(`  ${source.name}: ${items.length} 条`);
+    console.log('  ' + source.name + ' 代理: ' + items.length + ' 条');
     return items;
-  } catch (e) { console.log(`  ${source.name}: 获取失败 (${e.message})`); return []; }
+  } catch (e) { console.log('  ' + source.name + ' 代理: 失败 (' + e.message + ')'); return []; }
 }
 
 function parseJSONFeed(json, source) {
