@@ -47,7 +47,7 @@ function isNoise(title) {
 }
 
 function extractTag(xml, tag) {
-  const re = new RegExp(`<${tag}[^>]*><!\$$CDATA\\[([\\s\\S]*?)\$$\\]></${tag}>`, 'i');
+  const re = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>`, 'i');
   const m1 = xml.match(re);
   if (m1) return m1[1].trim();
   const re2 = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i');
@@ -339,20 +339,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
 var ND=${newsDataJSON};
 var ip=false,ip2=false,cc=0,cks=[],utt=null,sv=null,voices=[],vl=false,inited=false;
 var lastBoundary=0,boundaryTimer=null,chunkTimer=null;
+var wakeLock=null,silentAudio=null;
 
-function bnt(){var t='每日新闻播报。';for(var i=0;i<ND.length;i++){t+=ND[i].category+'新闻。'+ND[i].title+'。'+ND[i].content+'。';}t+='以上是今日新闻摘要，祝您有美好的一天。';return t;}
+function bnt(){var t='每日新闻播报。';for(var i=0;i<ND.length;i++){t+=ND[i].title+'。'+ND[i].content+'。';}t+='以上是今日新闻摘要，祝您有美好的一天。';return t;}
 
-function stc(text,ml){ml=ml||80;var r=[];var ss=text.split(/(?<=[。！？；])/);var c='';for(var i=0;i<ss.length;i++){if((c+ss[i]).length>ml&&c.length>0){r.push(c);c=ss[i];}else{c+=ss[i];}}if(c.length>0)r.push(c);return r;}
+function stc(text,ml){ml=ml||50;var r=[];var ss=text.split(/(?<=[。！？；，、])/);var c='';for(var i=0;i<ss.length;i++){if((c+ss[i]).length>ml&&c.length>0){r.push(c);c=ss[i];}else{c+=ss[i];}}if(c.length>0)r.push(c);return r;}
 
-function hl(idx){var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');var ft='';for(var i=0;i<=idx&&i<cks.length;i++)ft+=cks[i];var px='每日新闻播报。';var rm=ft;if(rm.indexOf(px)===0)rm=rm.substring(px.length);var nid=0;for(var i=0;i<ND.length;i++){var nt=ND[i].category+'新闻。'+ND[i].title+'。'+ND[i].content+'。';if(rm.length>=nt.length){rm=rm.substring(nt.length);nid=i+1;}else{nid=i;break;}}if(nid>0)nid--;if(its[nid]){its[nid].classList.add('ac');its[nid].scrollIntoView({behavior:'smooth',block:'center'});}var p=((idx+1)/cks.length)*100;document.getElementById('pf').style.width=p+'%';}
+function hl(idx){var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');var ft='';for(var i=0;i<=idx&&i<cks.length;i++)ft+=cks[i];var px='每日新闻播报。';var rm=ft;if(rm.indexOf(px)===0)rm=rm.substring(px.length);var nid=0;for(var i=0;i<ND.length;i++){var nt=ND[i].title+'。'+ND[i].content+'。';if(rm.length>=nt.length){rm=rm.substring(nt.length);nid=i+1;}else{nid=i;break;}}if(nid>0)nid--;if(its[nid]){its[nid].classList.add('ac');its[nid].scrollIntoView({behavior:'smooth',block:'center'});}var p=((idx+1)/cks.length)*100;document.getElementById('pf').style.width=p+'%';}
 
 function sc(){if(cc>=cks.length){oe();return;}hl(cc);ui('playing');clearTimers();lastBoundary=Date.now();utt=new SpeechSynthesisUtterance(cks[cc]);utt.lang='zh-CN';utt.rate=parseFloat(document.getElementById('rate').value);utt.pitch=1;utt.volume=1;var v=getCV();if(v)utt.voice=v;
 utt.onboundary=function(e){if(e.charIndex>0)lastBoundary=Date.now();};
 utt.onend=function(){clearTimers();cc++;sc();};
 utt.onerror=function(e){if(e.error==='canceled'||e.error==='interrupted'){clearTimers();return;}clearTimers();cc++;sc();};
 sv.speak(utt);
-boundaryTimer=setInterval(function(){if(Date.now()-lastBoundary>5000){sv.cancel();clearTimers();cc++;sc();}},1000);
-chunkTimer=setTimeout(function(){sv.cancel();clearTimers();cc++;sc();},15000);}
+boundaryTimer=setInterval(function(){if(Date.now()-lastBoundary>4000){sv.cancel();clearTimers();cc++;sc();}},1000);
+chunkTimer=setTimeout(function(){sv.cancel();clearTimers();cc++;sc();},10000);}
 
 function clearTimers(){if(boundaryTimer){clearInterval(boundaryTimer);boundaryTimer=null;}if(chunkTimer){clearTimeout(chunkTimer);chunkTimer=null;}}
 
@@ -362,13 +363,21 @@ function lv(){voices=sv.getVoices();if(voices.length>0)vl=true;}
 
 function getCV(){if(!vl)voices=sv.getVoices();for(var i=0;i<voices.length;i++){if(voices[i].lang==='zh-CN')return voices[i];}for(var i=0;i<voices.length;i++){if(voices[i].lang.indexOf('zh')===0)return voices[i];}for(var i=0;i<voices.length;i++){if(voices[i].lang.indexOf('cmn')!==-1)return voices[i];}return null;}
 
-function startSpeech(){if(!sv){document.getElementById('chromeHint').style.display='block';document.getElementById('sts').textContent='此浏览器不支持语音播报，请使用Chrome打开';return;}if(ip&&!ip2)return;if(ip2){sv.resume();ip2=false;ui('playing');return;}sv.cancel();cc=0;var ft=bnt();cks=stc(ft);initEng(function(){ip=true;ip2=false;ui('playing');sc();});}
+async function requestWakeLock(){try{if('wakeLock' in navigator){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',function(){wakeLock=null;});}}catch(e){}}
 
-function togglePause(){if(!ip)return;if(ip2){sv.resume();ip2=false;ui('playing');}else{sv.pause();ip2=true;ui('paused');}}
+function releaseWakeLock(){if(wakeLock){wakeLock.release();wakeLock=null;}}
 
-function stopSpeech(){sv.cancel();clearTimers();ip=false;ip2=false;cc=0;cks=[];ui('stopped');var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='0%';}
+function startSilentAudio(){try{var ac=new(window.AudioContext||window.webkitAudioContext)();var osc=ac.createOscillator();var gain=ac.createGain();gain.gain.value=0.001;osc.connect(gain);gain.connect(ac.destination);osc.start();silentAudio={ac:ac,osc:osc,gain:gain};}catch(e){}}
 
-function oe(){clearTimers();ip=false;ip2=false;cc=0;cks=[];ui('finished');var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='100%';}
+function stopSilentAudio(){if(silentAudio){try{silentAudio.osc.stop();silentAudio.ac.close();}catch(e){}silentAudio=null;}}
+
+function startSpeech(){if(!sv){document.getElementById('chromeHint').style.display='block';document.getElementById('sts').textContent='此浏览器不支持语音播报，请使用Chrome打开';return;}if(ip&&!ip2)return;if(ip2){sv.resume();ip2=false;ui('playing');return;}sv.cancel();cc=0;var ft=bnt();cks=stc(ft);requestWakeLock();startSilentAudio();initEng(function(){ip=true;ip2=false;ui('playing');sc();});}
+
+function togglePause(){if(!ip)return;if(ip2){sv.resume();ip2=false;ui('playing');requestWakeLock();}else{sv.pause();ip2=true;ui('paused');}}
+
+function stopSpeech(){sv.cancel();clearTimers();ip=false;ip2=false;cc=0;cks=[];ui('stopped');releaseWakeLock();stopSilentAudio();var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='0%';}
+
+function oe(){clearTimers();ip=false;ip2=false;cc=0;cks=[];ui('finished');releaseWakeLock();stopSilentAudio();var its=document.querySelectorAll('.ni');for(var i=0;i<its.length;i++)its[i].classList.remove('ac');document.getElementById('pf').style.width='100%';}
 
 function ui(s){var pb=document.getElementById('pBtn'),psb=document.getElementById('psBtn'),sb=document.getElementById('sBtn'),sts=document.getElementById('sts');switch(s){case'playing':sts.textContent='正在播报... ('+(cc+1)+'/'+cks.length+')';pb.style.display='none';psb.style.display='inline-block';psb.textContent='暂停';sb.style.display='inline-block';break;case'paused':sts.textContent='已暂停';psb.textContent='继续';break;case'stopped':sts.textContent='已停止';pb.style.display='inline-block';pb.textContent='开始播报';psb.style.display='none';sb.style.display='none';break;case'finished':sts.textContent='播报完成';pb.style.display='inline-block';pb.textContent='重新播报';psb.style.display='none';sb.style.display='none';break;}}
 
@@ -379,7 +388,8 @@ document.getElementById('pBtn').addEventListener('click',startSpeech);
 document.getElementById('psBtn').addEventListener('click',togglePause);
 document.getElementById('sBtn').addEventListener('click',stopSpeech);
 document.getElementById('rate').addEventListener('input',function(){document.getElementById('rv').textContent=parseFloat(this.value).toFixed(1)+'x';});
-document.addEventListener('visibilitychange',function(){if(document.hidden&&ip&&!ip2)togglePause();});
+document.addEventListener('visibilitychange',function(){if(document.hidden&&ip&&!ip2){sv.pause();ip2=true;ui('paused');}});
+if('wakeLock' in navigator){document.addEventListener('visibilitychange',function(){if(!document.hidden&&ip&&!ip2&&wakeLock===null){requestWakeLock();}});}
 })();
 </script></body></html>`;
 }
