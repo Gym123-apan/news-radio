@@ -2,11 +2,11 @@ name: Update Daily News
 
 on:
   schedule:
-    - cron: '0 23 * * *'
+    - cron: '55 22 * * *'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -29,6 +29,14 @@ jobs:
       - name: Generate news HTML
         run: |
           node scripts/generate-news.js
+
+      - name: Commit updated HTML
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add dist/index.html
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update daily news - $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
