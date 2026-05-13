@@ -2,15 +2,49 @@ const fs = require('fs');
 const path = require('path');
 
 const RSS_SOURCES = [
-  { name: '人民网-国内', url: 'http://www.people.com.cn/rss/politics.xml', category: '国内' },
-  { name: '人民网-国际', url: 'http://www.people.com.cn/rss/world.xml', category: '国际' },
-  { name: '人民网-财经', url: 'http://www.people.com.cn/rss/finance.xml', category: '财经' },
-  { name: '人民网-社会', url: 'http://www.people.com.cn/rss/society.xml', category: '社会' },
-  { name: '人民网-科技', url: 'http://www.people.com.cn/rss/scitech.xml', category: '科技' },
-  { name: '新华网-国际', url: 'http://www.xinhuanet.com/world/news_world.xml', category: '国际' },
-  { name: '新华网-财经', url: 'http://www.xinhuanet.com/fortune/news_fortune.xml', category: '财经' },
-  { name: '新浪新闻', url: 'https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2509&k=&num=50&r=0.5', category: '国内', jsonApi: true },
+  { name: '中新网-滚动', url: 'https://www.chinanews.com/rss/scroll-news.xml', category: '国内' },
+  { name: '新浪-要闻', url: 'https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2509&k=&num=50&r=0.5', category: '国内', jsonApi: true },
+  { name: 'BBC中文', url: 'https://feeds.bbci.co.uk/zhongwen/simp/rss.xml', category: '国际' },
+  { name: 'DW中文', url: 'https://rss.dw.com/rdf/rss-chi-all', category: '国际' },
+  { name: 'RFI中文', url: 'https://www.rfi.fr/cn/%E4%B8%AD%E5%9B%BD/rss', category: '国际' },
 ];
+
+const NOISE_KEYWORDS = ['酒价内参', '胜负彩', '开盘', '收盘', '快讯：', '涨停', '跌停', '涨幅', '跌幅', '股价', '期货', '港股', 'A股', '沪指', '深成指', '创业板指', '纳斯达克', '道琼斯', '标普', '基金', '债券', '外汇', '原油', '黄金价格', '比特币', '以太坊', '币圈', '彩票', '竞彩', '赔率', '盘口', '购股权', '优先票据', '认购本金', '质押', '授出', '获股东', '配售', '减持', '增持', '回购', '派息', '分红', '除权', '除息', '行权', '可转债', '定增', 'IPO', '招股书', '公开发售获', '供股', '折让', '发售价', '中国新闻奖', '参评', '公示', '订单总商品交易额', '早盘高开', '尾盘', '盘中', '换手率', '市盈率', '成交量', '成交额'];
+
+const CATEGORY_KEYWORDS = {
+  '国际': ['美国', '特朗普', '拜登', '俄罗斯', '乌克兰', '欧盟', '欧洲', '日本', '韩国', '朝鲜', '中东', '以色列', '伊朗', '巴勒斯坦', '联合国', '北约', 'G7', 'G20', '外交', '访华', '访美', '峰会', '制裁', '关税', '贸易战', '英国', '法国', '德国', '印度', '巴西', '非洲', '东南亚', '澳洲', '加拿大', '墨西哥'],
+  '财经': ['经济', 'GDP', '通胀', '央行', '利率', '降息', '加息', '财政', '税收', '消费', '出口', '进口', '投资', '楼市', '房地产', '房价', '房贷', '股市', '上市', '融资', '并购', '独角兽', '营收', '利润', '就业', '失业', '物价', 'CPI', 'PPI', 'PMI', '人民币', '美元', '汇率', '银行', '保险', '证券'],
+  '科技': ['AI', '人工智能', '芯片', '半导体', '5G', '6G', '量子', '航天', '火箭', '卫星', '太空', '空间站', '新能源', '电动车', '自动驾驶', '机器人', '大模型', 'ChatGPT', '深度学习', '算法', '数据', '云计算', '区块链', '元宇宙', '虚拟现实', '生物', '基因', '医药', '创新', '专利', 'C919', '光刻机'],
+  '社会': ['教育', '高考', '中考', '大学', '学校', '医疗', '医院', '医保', '养老', '社保', '就业', '房价', '交通', '事故', '安全', '环保', '污染', '气候', '地震', '洪水', '台风', '高温', '暴雨', '食品安全', '疫苗', '疫情', '反腐', '违纪', '违法', '犯罪', '警察', '法院', '判决', '维权', '民生', '培训', '猫腻', '骗局', '诈骗', '旅游', '公园', '消费', '工资', '退休', '生育', '儿童', '老人', '残疾人', '住房', '租房', '物业', '社区', '志愿', '慈善', '捐赠', '防灾', '减灾', '应急', '救灾', '遇难', '伤亡', '火灾', '爆炸', '溺水', '食物中毒', '偷拍', '隐私', '骚扰', '霸凌', '歧视', '维权', '上访', '信访', '举报', '督察', '巡视', '通报', '查处', '落马', '双开', '留置'],
+};
+
+function categorizeByKeywords(title, defaultCategory) {
+  var scores = {};
+  for (var cat in CATEGORY_KEYWORDS) {
+    scores[cat] = 0;
+    var keywords = CATEGORY_KEYWORDS[cat];
+    for (var i = 0; i < keywords.length; i++) {
+      if (title.indexOf(keywords[i]) !== -1) scores[cat] += 1;
+    }
+  }
+  var bestCat = null;
+  var bestScore = 0;
+  for (var cat in scores) {
+    if (scores[cat] > bestScore) {
+      bestScore = scores[cat];
+      bestCat = cat;
+    }
+  }
+  if (bestScore > 0) return bestCat;
+  return null;
+}
+
+function isNoise(title) {
+  for (var i = 0; i < NOISE_KEYWORDS.length; i++) {
+    if (title.indexOf(NOISE_KEYWORDS[i]) !== -1) return true;
+  }
+  return false;
+}
 
 function extractTag(xml, tag) {
   const re = new RegExp(`<${tag}[^>]*><!\$$CDATA\\[([\\s\\S]*?)\$$\\]></${tag}>`, 'i');
@@ -31,9 +65,11 @@ function parseRSS(xml, defaultCategory) {
     const title = extractTag(itemXml, 'title');
     const description = extractTag(itemXml, 'description');
     if (!title || title.length < 5) continue;
+    if (isNoise(title)) continue;
     const cleanDesc = description.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+    const cat = categorizeByKeywords(title, defaultCategory);
     items.push({
-      category: defaultCategory,
+      category: cat,
       title: title.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim(),
       content: cleanDesc || title,
     });
@@ -98,8 +134,12 @@ async function fetchViaProxy(source) {
     for (var i = 0; i < json.items.length; i++) {
       var entry = json.items[i];
       var title = (entry.title || '').replace(/<[^>]+>/g, '').trim();
+      if (isNoise(title)) continue;
       var desc = (entry.description || entry.content || title).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
-      if (title && title.length >= 5) items.push({ category: source.category, title: title, content: desc || title });
+      if (title && title.length >= 5) {
+        var cat = categorizeByKeywords(title, source.category);
+        items.push({ category: cat, title: title, content: desc || title });
+      }
     }
     console.log('  ' + source.name + ' 代理: ' + items.length + ' 条');
     return items;
@@ -107,13 +147,18 @@ async function fetchViaProxy(source) {
 }
 
 function parseJSONFeed(json, source) {
-  const items = [];
+  var items = [];
   try {
-    const list = json.result?.data || [];
-    for (const entry of list) {
-      const title = (entry.title || '').replace(/<[^>]+>/g, '').trim();
-      const content = (entry.intro || entry.digest || entry.description || title).replace(/<[^>]+>/g, '').trim();
-      if (title && title.length >= 5) items.push({ category: source.category, title, content: content || title });
+    var list = json.result && json.result.data ? json.result.data : [];
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i];
+      var title = (entry.title || '').replace(/<[^>]+>/g, '').trim();
+      if (isNoise(title)) continue;
+      var content = (entry.intro || entry.digest || entry.description || title).replace(/<[^>]+>/g, '').trim();
+      if (title && title.length >= 5) {
+        var cat = categorizeByKeywords(title, source.category);
+        items.push({ category: cat, title: title, content: content || title });
+      }
     }
   } catch (e) { /* ignore */ }
   return items;
@@ -188,6 +233,16 @@ async function fetchAllNews() {
     allItems.push(...items);
   }
   console.log(`总共抓取: ${allItems.length} 条`);
+
+  var catList = ['国际', '国内', '财经', '科技', '社会'];
+  var catIdx = 0;
+  for (var i = 0; i < allItems.length; i++) {
+    if (!allItems[i].category || catList.indexOf(allItems[i].category) === -1) {
+      allItems[i].category = catList[catIdx % catList.length];
+      catIdx++;
+    }
+  }
+
   const deduped = deduplicate(allItems);
   console.log(`去重后: ${deduped.length} 条`);
   let balanced = balanceCategories(deduped);
